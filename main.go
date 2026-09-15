@@ -282,9 +282,16 @@ func main() {
 
 	exporter := NewExporter(cfg)
 
-	prometheus.MustRegister(exporter)
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(exporter)
 
-	http.Handle("/metrics", promhttp.Handler())
+	http.Handle(
+		"/metrics",
+		promhttp.HandlerFor(
+			registry,
+			promhttp.HandlerOpts{},
+		),
+	)
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		exporter.mu.RLock()
