@@ -19,12 +19,12 @@ import (
 )
 
 type Config struct {
-	IMAPAddr       string
-	IMAPUser       string
-	IMAPPassword   string
-	ListenAddr     string
-	Interval       time.Duration
-	TLSInsecure    bool
+	IMAPAddr     string
+	IMAPUser     string
+	IMAPPassword string
+	ListenAddr   string
+	Interval     time.Duration
+	TLSInsecure  bool
 }
 
 type Exporter struct {
@@ -36,7 +36,7 @@ type Exporter struct {
 	unread   map[string]float64
 
 	lastSuccess float64
-	lastError   float64
+	lastScrape  float64
 }
 
 var (
@@ -112,13 +112,11 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		e.lastSuccess,
 	)
 
-	if e.lastScrape > 0 {
-		ch <- prometheus.MustNewConstMetric(
-			lastScrapeDesc,
-			prometheus.GaugeValue,
-			e.lastScrape,
-		)
-	}
+	ch <- prometheus.MustNewConstMetric(
+		lastScrapeDesc,
+		prometheus.GaugeValue,
+		e.lastScrape,
+	)
 }
 
 func (e *Exporter) Scrape() error {
@@ -128,9 +126,12 @@ func (e *Exporter) Scrape() error {
 		InsecureSkipVerify: e.cfg.TLSInsecure, //nolint:gosec
 	}
 
-	client, err := imapclient.DialTLS(e.cfg.IMAPAddr, &imapclient.Options{
-		TLSConfig: tlsConfig,
-	})
+	client, err := imapclient.DialTLS(
+		e.cfg.IMAPAddr,
+		&imapclient.Options{
+			TLSConfig: tlsConfig,
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("connect to IMAP: %w", err)
 	}
@@ -164,7 +165,11 @@ func (e *Exporter) Scrape() error {
 		}).Wait()
 
 		if err != nil {
-			log.Printf("status failed for mailbox %q: %v", name, err)
+			log.Printf(
+				"status failed for mailbox %q: %v",
+				name,
+				err,
+			)
 			continue
 		}
 
@@ -225,7 +230,12 @@ func getenvBool(key string, fallback bool) bool {
 
 	v, err := strconv.ParseBool(value)
 	if err != nil {
-		log.Printf("invalid boolean %s=%q, using %v", key, value, fallback)
+		log.Printf(
+			"invalid boolean %s=%q, using %v",
+			key,
+			value,
+			fallback,
+		)
 		return fallback
 	}
 
@@ -240,7 +250,12 @@ func getenvDuration(key string, fallback time.Duration) time.Duration {
 
 	v, err := time.ParseDuration(value)
 	if err != nil {
-		log.Printf("invalid duration %s=%q, using %v", key, value, fallback)
+		log.Printf(
+			"invalid duration %s=%q, using %v",
+			key,
+			value,
+			fallback,
+		)
 		return fallback
 	}
 
@@ -272,12 +287,16 @@ func main() {
 	http.Handle("/metrics", promhttp.Handler())
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		e.mu.RLock()
-		success := e.lastSuccess
-		e.mu.RUnlock()
+		exporter.mu.RLock()
+		success := exporter.lastSuccess
+		exporter.mu.RUnlock()
 
 		if success != 1 {
-			http.Error(w, "Proton Mail scrape failed", http.StatusServiceUnavailable)
+			http.Error(
+				w,
+				"Proton Mail scrape failed",
+				http.StatusServiceUnavailable,
+			)
 			return
 		}
 
@@ -285,7 +304,10 @@ func main() {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 
-	log.Printf("Proton Mail exporter listening on %s", cfg.ListenAddr)
+	log.Printf(
+		"Proton Mail exporter listening on %s",
+		cfg.ListenAddr,
+	)
 	log.Printf("IMAP: %s", cfg.IMAPAddr)
 	log.Printf("scrape interval: %s", cfg.Interval)
 
