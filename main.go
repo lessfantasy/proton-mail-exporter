@@ -22,6 +22,7 @@ type Config struct {
 	IMAPAddr     string
 	IMAPUser     string
 	IMAPPassword string
+	IMAPSecurity string
 	ListenAddr   string
 	Interval     time.Duration
 	TLSInsecure  bool
@@ -126,12 +127,20 @@ func (e *Exporter) Scrape() error {
 		InsecureSkipVerify: e.cfg.TLSInsecure, //nolint:gosec
 	}
 
-	client, err := imapclient.DialTLS(
-		e.cfg.IMAPAddr,
-		&imapclient.Options{
-			TLSConfig: tlsConfig,
-		},
-	)
+	var client *imapclient.Client
+	var err error
+
+	switch strings.ToLower(e.cfg.IMAPSecurity) {
+		case "ssl":
+			client, err = imapclient.DialTLS(e.cfg.IMAPAddr, &imapclient.Options{TLSConfig: tlsConfig})
+		case "starttls":
+			client, err = imapclient.DialStartTLS(e.cfg.IMAPAddr, &imapclient.Options{TLSConfig: tlsConfig})
+		case "insecure", "plain":
+			client, err = imapclient.DialInsecure(e.cfg.IMAPAddr, &imapclient.Options{TLSConfig: tlsConfig})
+		default:
+			return fmt.Errorf("unknown IMAP security mode: %q", e.cfg.IMAPSecurity)
+	}
+
 	if err != nil {
 		return fmt.Errorf("connect to IMAP: %w", err)
 	}
@@ -270,6 +279,7 @@ func main() {
 		ListenAddr:   getenv("LISTEN_ADDR", ":8080"),
 		Interval:     getenvDuration("SCRAPE_INTERVAL", 60*time.Second),
 		TLSInsecure:  getenvBool("PROTON_IMAP_TLS_INSECURE", true),
+		IMAPSecurity: getenv("PROTON_IMAP_SECURITY", "insecure"),
 	}
 
 	if cfg.IMAPUser == "" {
